@@ -5,10 +5,10 @@
 
 
 
-class Peer : public TorrentEntity {
+class Client : public TorrentEntity {
 public:
-    Peer(int numtasks, int rank);
-    ~Peer();
+    Client(int numtasks, int rank);
+    ~Client();
     void run() override;
     void debugPrint() override;
 private:

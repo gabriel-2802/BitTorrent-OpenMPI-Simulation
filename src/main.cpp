@@ -1,6 +1,6 @@
 #include "auxiliray.h"
 #include "Entity.h"
-#include "Peer.h"
+#include "Client.h"
 #include "Tracker.h"
 
 using namespace std;
@@ -24,10 +24,10 @@ int main (int argc, char *argv[]) {
     if (rank == TRACKER_RANK) {
         entity = new Tracker(numtasks, rank);
     } else {
-        entity = new Peer(numtasks, rank);
+        entity = new Client(numtasks, rank);
     } 
 
-    // cout << numtasks << " " << rank << "\n";
+    cout << numtasks << " " << rank << "\n";
 
     entity->run();
     delete entity;

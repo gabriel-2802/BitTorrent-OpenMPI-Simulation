@@ -14,6 +14,8 @@
 #define HASH_SIZE 32
 #define MAX_CHUNKS 100
 
+#define MAX_USERS 12
+
 #define DIE(assertion, call_description) \
     do { \
         if (assertion) { \
@@ -28,7 +30,6 @@
 #define DOWNLOAD_LIMIT 10
 
 typedef std::pair<int, std::string> f_frag_t; // the index of the fragment and the hash of the fragment
-typedef std::pair<int, std::vector<f_frag_t>> file_info_t; // file_owner(rank), file_frags
 
 struct download_args_t{
     int rank;
@@ -41,11 +42,14 @@ struct download_args_t{
 };
 
 struct swarm_t {
-    std::vector<int> seeds; // client with full file
-    std::vector<int> peers;
-
+    std::unordered_set<int> seeds; // client with full file
+    std::unordered_set<int> peers; // client with fragments
+    std::string fname;
     int segNum;
+
+    std::vector<std::string> f_hash; // file fragments hash
 };
+
 
 struct upload_args_t{
     int rank;
@@ -54,9 +58,10 @@ struct upload_args_t{
 
 
 enum REQUEST_TYPE{
-    REQUEST,
-    FINALISED_1_REQUEST,
-    FINALISED_ALL_REQUEST
+    SWARM_REQUEST, // client requests a file
+    FINALISED_FILE_REQUEST, // client finished downloading a file
+    FINALISED_CLIENT_REQUEST, // client finished downloading all files
+    FINALISED_SEG_REQUEST,  // client finished downloading a segment
 };
 
 enum PeerType {
@@ -68,3 +73,7 @@ enum ThreadType {
     DOWNLOAD,
     UPLOAD
 };
+
+void send_swarm(const swarm_t &swarm, int dest);
+
+void receive_swarm(swarm_t &swarm, int src);

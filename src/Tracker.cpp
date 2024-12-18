@@ -20,57 +20,120 @@ void Tracker::run() {
     MPI_Bcast(&ack, 1, MPI_INT, TRACKER_RANK, MPI_COMM_WORLD);
 
     while (true) {
-        REQUEST_TYPE req;
-        MPI_Recv(&req, 1, MPI_INT, MPI_ANY_SOURCE, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        // wait for messages from clients
+        MPI_Status status;
+        MPI_Recv(nullptr, 0, MPI_INT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+
+        int source = status.MPI_SOURCE;
+        REQUEST_TYPE req = (REQUEST_TYPE) status.MPI_TAG;
+
+        handleRequest(source, req);
+
+
+        cout << endl;
+        debugPrint();
+        cout << endl;
+
+        if (activePeers == 0)
+            break;
 
     }
-
-
-    debugPrint();
 }
 
 void Tracker::debugPrint() {
-    for (auto &swarm : swarms) {
-        std::cout << swarm.first << endl;
-
-        for (auto &frag : swarm.second.second) {
-            std::cout << frag.first << " " << frag.second << endl;
+    for (auto [fname, swarm] : fileSwarm) {
+        cout << endl;
+        cout << "File: " << fname << endl;
+        cout << "Peers: ";
+        for (auto &peer : swarm.peers) {
+            cout << peer << " ";
         }
+
+        cout << endl;
+        cout << "Seeds: ";
+
+        for (auto &seed : swarm.seeds) {
+            cout << seed << " ";
+        }
+
     }
+
 }
-// TODO: Improve ? 
+
 void Tracker::collectInformation() {
-    for (int rnk = 0; rnk < numtasks; rnk++) {
-        if (rnk == TRACKER_RANK) {
+    
+    for (int rk = 0; rk < numtasks; ++rk) {
+        if (rk == TRACKER_RANK)
             continue;
+
+        int numFiles;
+        MPI_Recv(&numFiles, 1, MPI_INT, rk, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+        while (numFiles--) {
+
+            char fname[MAX_FILENAME];
+            memset(fname, 0, MAX_FILENAME);
+            MPI_Recv(fname, MAX_FILENAME, MPI_CHAR, rk, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+            int numFrags;
+            MPI_Recv(&numFrags, 1, MPI_INT, rk, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+            if (fileSwarm.find(fname) == fileSwarm.end()) {
+                swarm_t swarm;
+                swarm.fname = fname;
+                swarm.segNum = numFrags;
+                fileSwarm[fname] = swarm;
+                
+            }
+
+            fileSwarm[fname].seeds.insert(rk);
+
+
+            while (numFrags--) {
+                char hash[HASH_SIZE + 1];
+                memset(hash, 0, HASH_SIZE + 1);
+                MPI_Recv(hash, HASH_SIZE + 1, MPI_CHAR, rk, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                fileSwarm[fname].f_hash.push_back(hash);
+            }
         }
         
-        int num_files;
-        MPI_Recv(&num_files, 1, MPI_INT, rnk, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    }
+}
 
-        char fName[MAX_FILENAME], hash[HASH_SIZE + 1];
-        memset(hash, 0, HASH_SIZE + 1);
-        memset(fName, 0, MAX_FILENAME);
+void Tracker::handleRequest(int src) {
+    char fname[MAX_FILENAME];
+    memset(fname, 0, MAX_FILENAME);
 
-        while (num_files--) {
-            // get file name
-            MPI_Recv(fName, MAX_FILENAME, MPI_CHAR, rnk, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            
-            // add file to swarms if it doesn't exist
-            if (swarms.find(fName) == swarms.end()) {
-                swarms[fName] = {rnk, vector<f_frag_t>()};
-            }
+    MPI_Recv(fname, MAX_FILENAME, MPI_CHAR, src, SWARM_REQUEST, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    DIE(fileSwarm.find(fname) == fileSwarm.end(), "File not found");
+    string file = fname;
 
-            int num_frags;
-            MPI_Recv(&num_frags, 1, MPI_INT, rnk, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+   // at this points it is known that src requested file fname => send the swarm of the file
+    swarm_t &swarm = fileSwarm[file];
+    send_swarm(swarm, src);
+}
 
-            while (num_frags--) {
-                int idx;
-                MPI_Recv(&idx, 1, MPI_INT, rnk, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+void Tracker::handleRequest(int src, REQUEST_TYPE req) {
+    char fname[MAX_FILENAME];
+    memset(fname, 0, MAX_FILENAME);
 
-                MPI_Recv(hash, HASH_SIZE + 1, MPI_CHAR, rnk, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                swarms[fName].second.push_back({idx, hash});
-            }
-        }
+    switch (req) {
+        case SWARM_REQUEST:
+            handleRequest(src);
+            break;
+        case FINALISED_FILE_REQUEST:
+            MPI_Recv(fname, MAX_FILENAME, MPI_CHAR, src, FINALISED_FILE_REQUEST, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            fileSwarm[fname].seeds.insert(src);
+            fileSwarm[fname].peers.erase(src);
+            break;
+        case FINALISED_CLIENT_REQUEST:
+            activePeers--;
+            break;
+        case FINALISED_SEG_REQUEST:
+            MPI_Recv(fname, MAX_FILENAME, MPI_CHAR, src, FINALISED_SEG_REQUEST, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            fileSwarm[fname].seeds.insert(src);
+            break;
+        default:
+            cerr << "Invalid request type\n";
     }
 }

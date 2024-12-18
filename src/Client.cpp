@@ -1,8 +1,8 @@
-#include "Peer.h"
+#include "Client.h"
 
 using namespace std;
 
-Peer::Peer(int numtasks, int rank) : TorrentEntity(numtasks, rank) {
+Client::Client(int numtasks, int rank) : TorrentEntity(numtasks, rank) {
     readFileFrags();
     downloads = DOWNLOAD_LIMIT;
     busyLevel = 0;
@@ -13,11 +13,11 @@ Peer::Peer(int numtasks, int rank) : TorrentEntity(numtasks, rank) {
 
 }
 
-Peer::~Peer() {
+Client::~Client() {
 
 }
 
-void Peer::run() {
+void Client::run() {
     announceToTracker();
     int ack;
     MPI_Bcast(&ack, 1, MPI_INT, TRACKER_RANK, MPI_COMM_WORLD);
@@ -28,7 +28,7 @@ void Peer::run() {
     printDownloadedFrags();
 }
 
-void Peer::createThreads() {
+void Client::createThreads() {
     void *status;
     int r;
 
@@ -39,7 +39,7 @@ void Peer::createThreads() {
     DIE(r, "upload thread creation failed");
 }
 
-void Peer::joinThreads() {
+void Client::joinThreads() {
     void *status;
     int r;
 
@@ -50,31 +50,69 @@ void Peer::joinThreads() {
     DIE(r, "upload thread join failed");
 }
 
-void *Peer::downloadThreadFunc(void *arg) {
+void *Client::downloadThreadFunc(void *arg) {
 	download_args_t *args  = (download_args_t *) arg;
+
     
+    for (auto &file : *args->wantedFiles) {
+        // send request to tracker of type REQUEST to know the next message will be the file name
+        MPI_Send(nullptr, 0, MPI_INT, TRACKER_RANK, SWARM_REQUEST, MPI_COMM_WORLD);
+
+        char fName[MAX_FILENAME];
+        memset(fName, 0, MAX_FILENAME);
+        strcpy(fName, file.c_str());
+
+        MPI_Send(fName, MAX_FILENAME, MPI_CHAR, TRACKER_RANK, SWARM_REQUEST, MPI_COMM_WORLD);
+        
+        swarm_t fSwarm;
+        receive_swarm(fSwarm, TRACKER_RANK);
+
+       
+        
+        // consider this complete
+        // download frag
+
+        auto it = args->downloadedFrags->find(file);
+        auto frags = it->second;
+        
+        if (frags.size() == fSwarm.segNum) {
+            MPI_Send(nullptr, 0, MPI_INT, TRACKER_RANK, FINALISED_FILE_REQUEST, MPI_COMM_WORLD);
+            MPI_Send(fName, MAX_FILENAME, MPI_CHAR, TRACKER_RANK, FINALISED_FILE_REQUEST, MPI_COMM_WORLD);
+        }
+    }
+
+    // client ended downloading all files
+    MPI_Send(nullptr, 0, MPI_INT, TRACKER_RANK, FINALISED_CLIENT_REQUEST, MPI_COMM_WORLD);
+
+    pthread_exit(NULL);
 }
 
-void *Peer::uploadThreadFunc(void *arg)
+void *Client::uploadThreadFunc(void *arg)
 {
     int rank = *(int*) arg;
 
     return NULL;
 }
 
-void *Peer::buildThreadArg(ThreadType type) {
+void *Client::buildThreadArg(ThreadType type) {
     download_args_t *d_args = new download_args_t;
     upload_args_t *u_args = new upload_args_t;
 
     switch (type) {
         case DOWNLOAD:
+            d_args->rank = rank;
+            d_args->downloads = &downloads;
+            d_args->wantedFiles = &wantedFiles;
+            d_args->downloadedFrags = &downloadedFrags;
             return (void *) d_args;
         case UPLOAD:
             return (void *) u_args;
+        default:
+            return NULL;   
     }
 }
 
-void Peer::readFileFrags() {
+void Client::readFileFrags() {
     ifstream fin(IN_FILE(rank));
     DIE(!fin, "error opening file");
 
@@ -108,34 +146,32 @@ void Peer::readFileFrags() {
     fin.close();
 }
 
-void Peer::announceToTracker() {
+void Client::announceToTracker() {
     int numFiles = fileFrags.size();
 
     MPI_Send(&numFiles, 1, MPI_INT, TRACKER_RANK, 0, MPI_COMM_WORLD);
 
-    char fName[MAX_FILENAME], hash[HASH_SIZE + 1];
-    memset(hash, 0, HASH_SIZE + 1);
-    memset(fName, 0, MAX_FILENAME);
 
     for (auto [fileName, frags] : fileFrags) {
         
-        memccpy(fName, fileName.c_str(), 1, MAX_FILENAME);
+        char fName[MAX_FILENAME];
+        memset(fName, 0, MAX_FILENAME);
+        strcpy(fName, fileName.c_str());
         MPI_Send(fName, MAX_FILENAME, MPI_CHAR, TRACKER_RANK, 0, MPI_COMM_WORLD);
 
         int numFrags = frags.size();
         MPI_Send(&numFrags, 1, MPI_INT, TRACKER_RANK, 0, MPI_COMM_WORLD);
 
         for (auto &frag : frags) {
-            int idx = frag.first;
-            MPI_Send(&idx, 1, MPI_INT, TRACKER_RANK, 0, MPI_COMM_WORLD);
-
-            memcpy(hash, frag.second.c_str(), HASH_SIZE);
+            char hash[HASH_SIZE + 1];
+            memset(hash, 0, HASH_SIZE + 1);
+            strcpy(hash, frag.second.c_str());
             MPI_Send(hash, HASH_SIZE + 1, MPI_CHAR, TRACKER_RANK, 0, MPI_COMM_WORLD);
         }
     }
 }
 
-void Peer::printDownloadedFrags() {
+void Client::printDownloadedFrags() {
     for (auto [fname, fragInfo] : downloadedFrags) {
         ofstream fout(OUT_FILE(rank, fname));
 
@@ -148,7 +184,7 @@ void Peer::printDownloadedFrags() {
     }
 }
 
-void Peer::debugPrint() {
+void Client::debugPrint() {
 
 }
 
