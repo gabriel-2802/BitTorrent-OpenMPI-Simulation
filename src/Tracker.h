@@ -11,12 +11,12 @@ public:
     void debugPrint() override;
 
 private:
-    // std::unordered_map<std::string, file_info_t> swarms; // fileName -> file_info_t
     int activePeers;
     std::unordered_map<std::string, swarm_t> fileSwarm; // fileName -> swarm_t
+    std::vector<int> uploadPerClient;
 
     void collectInformation();
     void handleRequest(int src);
-    void handleRequest(int src, REQUEST_TYPE req);
+    void handleRequest(int src, COMMUNICATION_TAG req);
 
 };

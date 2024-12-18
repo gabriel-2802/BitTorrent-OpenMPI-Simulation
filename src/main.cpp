@@ -2,8 +2,11 @@
 #include "Entity.h"
 #include "Client.h"
 #include "Tracker.h"
+#include "type.h"
 
 using namespace std;
+
+MPI_Datatype INQUIRY_T;
 
 int main (int argc, char *argv[]) {
     int numtasks, rank;
@@ -14,6 +17,8 @@ int main (int argc, char *argv[]) {
         cerr << "MPI nu are suport pentru multi-threading\n";
         exit(-1);
     }
+
+    INQUIRY_T = createInquiryType();
 
     MPI_Comm_size(MPI_COMM_WORLD, &numtasks);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -27,10 +32,10 @@ int main (int argc, char *argv[]) {
         entity = new Client(numtasks, rank);
     } 
 
-    cout << numtasks << " " << rank << "\n";
-
     entity->run();
     delete entity;
+    
+    MPI_Type_free(&INQUIRY_T);
 
     MPI_Finalize();
 }

@@ -28,16 +28,28 @@
 #define IN_FILE(rank) ("in" + std::to_string(rank) + ".txt")
 #define OUT_FILE(rank, name) ("client" + std::to_string(rank) + "_" + name)
 #define DOWNLOAD_LIMIT 10
-
-typedef std::pair<int, std::string> f_frag_t; // the index of the fragment and the hash of the fragment
+#define INFINITY 1000000
 
 struct download_args_t{
     int rank;
-    int *downloads;
+    int *to_be_downloaded; // number of files downloaded
+    int num;
+    pthread_mutex_t *lock;
 
-    std::vector<std::string> *wantedFiles;
-    std::unordered_map<std::string, std::vector<f_frag_t>> *downloadedFrags; // file -> vector<idx, hash>
+    std::unordered_map<std::string, bool> wanted_files;
+    std::unordered_map<std::string, std::vector<std::string>> *partial_files; // file -> vector<idx, hash>
 
+    
+};
+
+
+struct upload_args_t{
+    int rank;
+    int num;
+    pthread_mutex_t *lock;
+
+    std::unordered_map<std::string, std::vector<std::string>> *full_files;
+    std::unordered_map<std::string, std::vector<std::string>> *partial_files;
 
 };
 
@@ -45,23 +57,30 @@ struct swarm_t {
     std::unordered_set<int> seeds; // client with full file
     std::unordered_set<int> peers; // client with fragments
     std::string fname;
-    int segNum;
+    int seg_num;
 
     std::vector<std::string> f_hash; // file fragments hash
 };
 
-
-struct upload_args_t{
-    int rank;
-
+struct inquiry_t {
+    int frag_idx;
+    char fileName[MAX_FILENAME];
+    char hash[HASH_SIZE + 1];
 };
 
 
-enum REQUEST_TYPE{
-    SWARM_REQUEST, // client requests a file
-    FINALISED_FILE_REQUEST, // client finished downloading a file
-    FINALISED_CLIENT_REQUEST, // client finished downloading all files
-    FINALISED_SEG_REQUEST,  // client finished downloading a segment
+enum COMMUNICATION_TAG{
+    TAG_INIT,
+    TAG_PROBING,
+    TAG_FILE_DONE,
+    TAG_CLIENT_DONE,
+    TAG_SEG_DONE,
+    TAG_KILL_ALL,
+    TAG_SWARM,
+    TAG_BUSSYNESS,
+    TAG_INQUIRY,
+    TAG_INQUIRY_ACK,
+    TAG_INQUIRY_RESPONSE
 };
 
 enum PeerType {
@@ -74,6 +93,14 @@ enum ThreadType {
     UPLOAD
 };
 
+
+
 void send_swarm(const swarm_t &swarm, int dest);
 
 void receive_swarm(swarm_t &swarm, int src);
+
+void send_inquiry(const inquiry_t &inquiry, int dest);
+
+void receive_inquiry(inquiry_t &inquiry, int src);
+
+MPI_Datatype createInquiryType();

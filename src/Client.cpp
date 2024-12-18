@@ -4,21 +4,24 @@ using namespace std;
 
 Client::Client(int numtasks, int rank) : TorrentEntity(numtasks, rank) {
     readFileFrags();
-    downloads = DOWNLOAD_LIMIT;
-    busyLevel = 0;
+    to_be_downloaded = wanted_files.size();
+    
 
-    for (auto &file : wantedFiles) {
-        downloadedFrags[file] = {};
+    for (auto &file : wanted_files) {
+        to_be_downloaded_files[file] = {};
     }
+
+    pthread_mutex_init(&lock, NULL);
 
 }
 
 Client::~Client() {
-
+    pthread_mutex_destroy(&lock);
 }
 
 void Client::run() {
-    announceToTracker();
+    // debugPrint();
+    announceTracker();
     int ack;
     MPI_Bcast(&ack, 1, MPI_INT, TRACKER_RANK, MPI_COMM_WORLD);
     DIE(ack != 1, "Fatal Failure: Tracker did not acknowledge");
@@ -29,13 +32,12 @@ void Client::run() {
 }
 
 void Client::createThreads() {
-    void *status;
     int r;
 
-    r = pthread_create(&download_thread, NULL, downloadThreadFunc, buildThreadArg(DOWNLOAD));
+    r = pthread_create(&download_thread, NULL, download_t_func, buildThreadArg(DOWNLOAD));
     DIE(r, "download thread creation failed");
     
-    r = pthread_create(&upload_thread, NULL, uploadThreadFunc, buildThreadArg(UPLOAD));
+    r = pthread_create(&upload_thread, NULL, upload_t_func, buildThreadArg(UPLOAD));
     DIE(r, "upload thread creation failed");
 }
 
@@ -50,49 +52,6 @@ void Client::joinThreads() {
     DIE(r, "upload thread join failed");
 }
 
-void *Client::downloadThreadFunc(void *arg) {
-	download_args_t *args  = (download_args_t *) arg;
-
-    
-    for (auto &file : *args->wantedFiles) {
-        // send request to tracker of type REQUEST to know the next message will be the file name
-        MPI_Send(nullptr, 0, MPI_INT, TRACKER_RANK, SWARM_REQUEST, MPI_COMM_WORLD);
-
-        char fName[MAX_FILENAME];
-        memset(fName, 0, MAX_FILENAME);
-        strcpy(fName, file.c_str());
-
-        MPI_Send(fName, MAX_FILENAME, MPI_CHAR, TRACKER_RANK, SWARM_REQUEST, MPI_COMM_WORLD);
-        
-        swarm_t fSwarm;
-        receive_swarm(fSwarm, TRACKER_RANK);
-
-       
-        
-        // consider this complete
-        // download frag
-
-        auto it = args->downloadedFrags->find(file);
-        auto frags = it->second;
-        
-        if (frags.size() == fSwarm.segNum) {
-            MPI_Send(nullptr, 0, MPI_INT, TRACKER_RANK, FINALISED_FILE_REQUEST, MPI_COMM_WORLD);
-            MPI_Send(fName, MAX_FILENAME, MPI_CHAR, TRACKER_RANK, FINALISED_FILE_REQUEST, MPI_COMM_WORLD);
-        }
-    }
-
-    // client ended downloading all files
-    MPI_Send(nullptr, 0, MPI_INT, TRACKER_RANK, FINALISED_CLIENT_REQUEST, MPI_COMM_WORLD);
-
-    pthread_exit(NULL);
-}
-
-void *Client::uploadThreadFunc(void *arg)
-{
-    int rank = *(int*) arg;
-
-    return NULL;
-}
 
 void *Client::buildThreadArg(ThreadType type) {
     download_args_t *d_args = new download_args_t;
@@ -101,11 +60,21 @@ void *Client::buildThreadArg(ThreadType type) {
     switch (type) {
         case DOWNLOAD:
             d_args->rank = rank;
-            d_args->downloads = &downloads;
-            d_args->wantedFiles = &wantedFiles;
-            d_args->downloadedFrags = &downloadedFrags;
+            d_args->num = numtasks;
+            d_args->lock = &lock;
+            d_args->to_be_downloaded = &to_be_downloaded;
+
+            d_args->partial_files = &to_be_downloaded_files;
+            for (auto &file : wanted_files) {
+                d_args->wanted_files[file] = true;
+            }
             return (void *) d_args;
         case UPLOAD:
+            u_args->rank = rank;
+            u_args->num = numtasks;
+            u_args->lock = &lock;
+            u_args->full_files = &full_files;
+            u_args->partial_files = &to_be_downloaded_files;
             return (void *) u_args;
         default:
             return NULL;   
@@ -124,14 +93,14 @@ void Client::readFileFrags() {
         string fileName;
         fin >> fileName;
 
-        int numFrags, idx = 0;
+        int numFrags;
         fin >> numFrags;
 
         while (numFrags--) {
             string frag;
             fin >> frag;
 
-            fileFrags[fileName].push_back({idx++, frag});
+            full_files[fileName].push_back(frag);
         }
     }
 
@@ -140,51 +109,60 @@ void Client::readFileFrags() {
         string fileName;
         fin >> fileName;
 
-        wantedFiles.push_back(fileName);
+        wanted_files.insert(fileName);
     }
 
     fin.close();
 }
 
-void Client::announceToTracker() {
-    int numFiles = fileFrags.size();
+void Client::announceTracker() {
+    int numFiles = full_files.size();
 
-    MPI_Send(&numFiles, 1, MPI_INT, TRACKER_RANK, 0, MPI_COMM_WORLD);
+    MPI_Send(&numFiles, 1, MPI_INT, TRACKER_RANK, TAG_INIT, MPI_COMM_WORLD);
 
 
-    for (auto [fileName, frags] : fileFrags) {
+    for (auto [fileName, frags] : full_files) {
         
         char fName[MAX_FILENAME];
         memset(fName, 0, MAX_FILENAME);
         strcpy(fName, fileName.c_str());
-        MPI_Send(fName, MAX_FILENAME, MPI_CHAR, TRACKER_RANK, 0, MPI_COMM_WORLD);
+        MPI_Send(fName, MAX_FILENAME, MPI_CHAR, TRACKER_RANK, TAG_INIT, MPI_COMM_WORLD);
 
         int numFrags = frags.size();
-        MPI_Send(&numFrags, 1, MPI_INT, TRACKER_RANK, 0, MPI_COMM_WORLD);
+        MPI_Send(&numFrags, 1, MPI_INT, TRACKER_RANK, TAG_INIT, MPI_COMM_WORLD);
 
         for (auto &frag : frags) {
             char hash[HASH_SIZE + 1];
             memset(hash, 0, HASH_SIZE + 1);
-            strcpy(hash, frag.second.c_str());
-            MPI_Send(hash, HASH_SIZE + 1, MPI_CHAR, TRACKER_RANK, 0, MPI_COMM_WORLD);
+            strcpy(hash, frag.c_str());
+            MPI_Send(hash, HASH_SIZE + 1, MPI_CHAR, TRACKER_RANK, TAG_INIT, MPI_COMM_WORLD);
         }
     }
 }
 
 void Client::printDownloadedFrags() {
-    for (auto [fname, fragInfo] : downloadedFrags) {
-        ofstream fout(OUT_FILE(rank, fname));
-
-        sort(fragInfo.begin(), fragInfo.end());
+    for (auto [fname, fragInfo] : to_be_downloaded_files) {
+        std::stringstream buffer;
 
         for (auto &frag : fragInfo) {
-            fout << frag.second << endl;
+            buffer << frag << std::endl;
         }
-    
+
+        std::ofstream fout(OUT_FILE(rank, fname));
+        fout << buffer.str();
+        fout.close();
     }
 }
 
-void Client::debugPrint() {
 
+void Client::debugPrint() {
+    for (auto &[fname, frags] : full_files) {
+        cout << "File: " << fname << endl;
+        cout << "Frags: ";
+        for (auto &frag : frags) {
+            cout << frag << " ";
+        }
+        cout << endl;
+    }
 }
 

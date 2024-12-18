@@ -1,7 +1,10 @@
 #pragma once
+#include <sstream>
 
 #include "Entity.h"
 #include "auxiliray.h"
+#include "type.h"
+#include "thread_functions.h"
 
 
 
@@ -15,26 +18,21 @@ private:
     pthread_t download_thread;
     pthread_t upload_thread;
 
-    std::vector<std::string> wantedFiles;
-    std::unordered_map<std::string, std::vector<f_frag_t>> fileFrags; //fileName -> vector<file_frags/hash>
-    std::unordered_map<std::string, std::vector<f_frag_t>> downloadedFrags; //fileName -> vector<file_frags/hash>
+    std::unordered_set<std::string> wanted_files;
+    std::unordered_map<std::string, std::vector<std::string>> full_files; //fileName -> vector<file_frags/hash>
+    std::unordered_map<std::string, std::vector<std::string>> to_be_downloaded_files; //fileName -> vector<file_frags/hash>
+    
+    // synchronization
+    pthread_mutex_t lock;
 
-    int downloads;
-    int busyLevel; // +1 for every upload
+    int to_be_downloaded; // count of files that must be downloaded
 
     
     void createThreads();
     void joinThreads();
-    static void *downloadThreadFunc(void *arg);
-    static void *uploadThreadFunc(void *arg);
     void *buildThreadArg(ThreadType type);
 
     void readFileFrags();
-    void announceToTracker();
+    void announceTracker();
     void printDownloadedFrags();
-
-
-
-    
-
 };
