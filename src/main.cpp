@@ -1,5 +1,7 @@
 #include "auxiliray.h"
-#include "classes.h"
+#include "Entity.h"
+#include "Peer.h"
+#include "Tracker.h"
 
 using namespace std;
 
@@ -24,6 +26,8 @@ int main (int argc, char *argv[]) {
     } else {
         entity = new Peer(numtasks, rank);
     } 
+
+    // cout << numtasks << " " << rank << "\n";
 
     entity->run();
     delete entity;
