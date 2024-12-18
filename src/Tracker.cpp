@@ -33,6 +33,8 @@ void Tracker::run() {
          if (activePeers == 0)
             break;
 
+        debugPrint();
+
     }
 
 
@@ -44,6 +46,8 @@ void Tracker::run() {
 
         MPI_Send(nullptr, 0, MPI_INT, rk, TAG_KILL_ALL, MPI_COMM_WORLD);
     }
+
+    debugPrint();
 }
 
 void Tracker::debugPrint() {
@@ -65,6 +69,12 @@ void Tracker::debugPrint() {
 
         cout << endl << endl;
 
+    }
+
+    for (int i = 0; i < numtasks; ++i) {
+        if (i == TRACKER_RANK)
+            continue;
+        cout << "Client " << i << " has " << uploadPerClient[i] << " uploads\n";
     }
 
 }
@@ -143,11 +153,15 @@ void Tracker::handleRequest(int src, COMMUNICATION_TAG req) {
             break;
         case TAG_SEG_DONE:
             MPI_Recv(fname, MAX_FILENAME, MPI_CHAR, src, TAG_SEG_DONE, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            fileSwarm[fname].seeds.insert(src);
+            fileSwarm[fname].peers.insert(src);
             break;
         case TAG_BUSSYNESS:
             MPI_Recv(nullptr, 0, MPI_INT, src, TAG_BUSSYNESS, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             MPI_Send(uploadPerClient.data(), numtasks, MPI_INT, src, TAG_BUSSYNESS, MPI_COMM_WORLD);
+            break;
+        case TAG_UPLOAD_CONFIRM:
+            MPI_Recv(nullptr, 0, MPI_INT, src, TAG_UPLOAD_CONFIRM, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            uploadPerClient[src]++;
             break;
         default:
             cerr << "Invalid request type\n";

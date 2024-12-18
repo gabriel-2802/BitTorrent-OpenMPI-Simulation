@@ -5,5 +5,9 @@ file1 3
 122630ce0978fd69fbbeee009249752c
 file7 1
 c02e953060b4d4752c79cee3feb1fc25
-1
+5
 file2
+file3
+file4
+file5
+file6

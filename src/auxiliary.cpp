@@ -22,12 +22,8 @@ void receive_swarm(swarm_t &swarm, int src) {
 
     MPI_Recv(data, size, MPI_CHAR, src, TAG_DATA, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-    try {
-        swarm = deserialize_swarm(std::string(data, size));
-    } catch (...) {
-        delete[] data;
-        throw;
-    }
+    swarm = deserialize_swarm(std::string(data, size));
+    
 
     delete[] data;
 }

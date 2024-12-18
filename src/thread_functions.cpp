@@ -20,13 +20,11 @@ void *download_t_func(void *arg) {
             receive_swarm(fSwarm, TRACKER_RANK);
 
 
-            // // download a fragment
             download_fragment(args, fSwarm);
-            // // if the file is completed, notify the tracker
             download_check_file_completion(args, fSwarm, file);
         }
 
-        // no more files to download
+        // no more files to download for this client
         if (*(args->to_be_downloaded) == 0)
             break;
     }
@@ -64,6 +62,10 @@ void download_fragment(download_args_t *arg, const swarm_t& swarm) {
         memcpy(inquiry.fileName, swarm.fname.c_str(), swarm.fname.size());
         memset(inquiry.hash, 0, HASH_SIZE + 1);
 
+        if (swarm.peers.find(src) == swarm.peers.end() && swarm.seeds.find(src) == swarm.seeds.end())
+            continue;
+            
+
         MPI_Send(&inquiry, 1, INQUIRY_T, src, TAG_INQUIRY, MPI_COMM_WORLD);
 
 
@@ -75,15 +77,19 @@ void download_fragment(download_args_t *arg, const swarm_t& swarm) {
             memset(buff, 0, HASH_SIZE + 1);
             MPI_Recv(buff, HASH_SIZE + 1, MPI_CHAR, src, TAG_INQUIRY_RESPONSE, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
+            // announce the tracker that this client downloaded a fragment
+            MPI_Send(inquiry.fileName, MAX_FILENAME, MPI_CHAR, TRACKER_RANK, TAG_SEG_DONE, MPI_COMM_WORLD);
+
             string hash = buff;
             arg->partial_files->find(swarm.fname)->second.push_back(hash);
             break;
+
         }
     }
 }
 
 void download_check_file_completion(download_args_t *arg, swarm_t swarm, string file) {
-    if (arg->partial_files->find(file)->second.size() == swarm.seg_num) {
+    if ((int)arg->partial_files->find(file)->second.size() == swarm.seg_num) {
         /*  *(arg->to_be_downloaded)--; is wrong. it was discovered after 2 hours of debugging,
         i despise c/c++ with passion */
         --(*(arg->to_be_downloaded)); 
@@ -129,9 +135,6 @@ void upload_inquiry_handler(upload_args_t *argm, int src) {
 
     MPI_Recv(&inquiry, 1, INQUIRY_T, src, TAG_INQUIRY, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-    // inquiry_t inquiry;
-    // receive_inquiry(inquiry, src);
-
     int ack = 0;
     string hash = "random_hash";
     upload_confirm_inquiry(argm, inquiry, ack, hash);
@@ -143,7 +146,10 @@ void upload_inquiry_handler(upload_args_t *argm, int src) {
         char buff[HASH_SIZE + 1];
         memset(buff, 0, HASH_SIZE + 1);
         strcpy(buff, hash.c_str());
+
         MPI_Send(buff, HASH_SIZE + 1, MPI_CHAR, src, TAG_INQUIRY_RESPONSE, MPI_COMM_WORLD);
+        // announce the tracker that this client allowed another client to download a fragment
+        MPI_Send(nullptr, 0, MPI_INT, TRACKER_RANK, TAG_UPLOAD_CONFIRM, MPI_COMM_WORLD);
     }
 }
 
@@ -157,7 +163,7 @@ void upload_confirm_inquiry(upload_args_t *arg, const inquiry_t &inquiry, int &a
         return;
     }
 
-    if (arg->partial_files->find(file) != arg->partial_files->end() && arg->partial_files->find(file)->second.size() > frag_idx) {
+    if (arg->partial_files->find(file) != arg->partial_files->end() && (int)arg->partial_files->find(file)->second.size() > frag_idx) {
         ack = 1;
         hash = arg->partial_files->find(file)->second[frag_idx];
         return;
