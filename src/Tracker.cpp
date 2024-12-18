@@ -30,7 +30,7 @@ void Tracker::run() {
 
         handleRequest(source, req);
 
-        if (activePeers == 0)
+         if (activePeers == 0)
             break;
 
     }

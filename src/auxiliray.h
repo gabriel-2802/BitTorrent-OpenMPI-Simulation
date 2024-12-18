@@ -7,6 +7,8 @@
 #include <fstream>
 #include <vector>
 #include <algorithm>
+#include <sstream>
+#include <cstring>
 
 #define TRACKER_RANK 0
 #define MAX_FILES 10
@@ -80,7 +82,9 @@ enum COMMUNICATION_TAG{
     TAG_BUSSYNESS,
     TAG_INQUIRY,
     TAG_INQUIRY_ACK,
-    TAG_INQUIRY_RESPONSE
+    TAG_INQUIRY_RESPONSE,
+    TAG_DATA,
+    TAG_DATA_SIZE
 };
 
 enum PeerType {
@@ -102,5 +106,9 @@ void receive_swarm(swarm_t &swarm, int src);
 void send_inquiry(const inquiry_t &inquiry, int dest);
 
 void receive_inquiry(inquiry_t &inquiry, int src);
+
+std::string serialize_swarm(const swarm_t &swarm);
+
+swarm_t deserialize_swarm(const std::string &data);
 
 MPI_Datatype createInquiryType();

@@ -10,6 +10,7 @@ void *download_t_func(void *arg) {
             if (!wanted) {
                 continue;
             }
+
             char fName[MAX_FILENAME];
             memset(fName, 0, MAX_FILENAME);
             strcpy(fName, file.c_str());
@@ -18,16 +19,16 @@ void *download_t_func(void *arg) {
             swarm_t fSwarm;
             receive_swarm(fSwarm, TRACKER_RANK);
 
-            // download a fragment
+
+            // // download a fragment
             download_fragment(args, fSwarm);
-            // if the file is completed, notify the tracker
+            // // if the file is completed, notify the tracker
             download_check_file_completion(args, fSwarm, file);
         }
 
         // no more files to download
-        if (*(args->to_be_downloaded) == 0) {
+        if (*(args->to_be_downloaded) == 0)
             break;
-        }
     }
 
     // client ended downloading all its files
@@ -139,7 +140,6 @@ void upload_inquiry_handler(upload_args_t *argm, int src) {
 
     MPI_Send(&ack, 1, MPI_INT, src, TAG_INQUIRY_ACK, MPI_COMM_WORLD);
     if (ack) {
-        cout << hash << endl;
         char buff[HASH_SIZE + 1];
         memset(buff, 0, HASH_SIZE + 1);
         strcpy(buff, hash.c_str());

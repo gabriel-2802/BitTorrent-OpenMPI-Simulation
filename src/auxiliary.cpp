@@ -3,69 +3,35 @@
 using namespace std;
 
 void send_swarm(const swarm_t &swarm, int dest) {
-    int ss = swarm.seeds.size();
-    MPI_Send(&ss, 1, MPI_INT, dest, TAG_SWARM, MPI_COMM_WORLD);
+    std::string data = serialize_swarm(swarm);
+    int size = data.size();
 
-    for (auto &seed : swarm.seeds) {
-        MPI_Send(&seed, 1, MPI_INT, dest, TAG_SWARM, MPI_COMM_WORLD);
-    }
-
-    int p = swarm.peers.size();
-    MPI_Send(&p, 1, MPI_INT, dest, TAG_SWARM, MPI_COMM_WORLD);
-
-    for (auto &peer : swarm.peers) {
-        MPI_Send(&peer, 1, MPI_INT, dest, TAG_SWARM, MPI_COMM_WORLD);
-    }
-
-    char fname[MAX_FILENAME];
-    memset(fname, 0, MAX_FILENAME);
-    memcpy(fname, swarm.fname.c_str(), swarm.fname.size());
-    MPI_Send(fname, MAX_FILENAME, MPI_CHAR, dest, TAG_SWARM, MPI_COMM_WORLD);
-
-    int segNum = swarm.seg_num;
-    MPI_Send(&segNum, 1, MPI_INT, dest, TAG_SWARM, MPI_COMM_WORLD);
-
-    for (auto &frag : swarm.f_hash) {
-        char hash[HASH_SIZE + 1];
-        memset(hash, 0, HASH_SIZE + 1);
-        memcpy(hash, frag.c_str(), frag.size());
-        MPI_Send(hash, HASH_SIZE + 1, MPI_CHAR, dest, TAG_SWARM, MPI_COMM_WORLD);
-    }
+    MPI_Send(&size, 1, MPI_INT, dest, TAG_DATA_SIZE, MPI_COMM_WORLD);
+    MPI_Send(data.data(), size, MPI_CHAR, dest, TAG_DATA, MPI_COMM_WORLD);
 }
 
 void receive_swarm(swarm_t &swarm, int src) {
-    int s;
-    MPI_Recv(&s, 1, MPI_INT, src, TAG_SWARM, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-    for (int i = 0; i < s; ++i) {
-        int seed;
-        MPI_Recv(&seed, 1, MPI_INT, src, TAG_SWARM, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        swarm.seeds.insert(seed);
+    int size;
+    MPI_Recv(&size, 1, MPI_INT, src, TAG_DATA_SIZE, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+    // Allocate memory for incoming data
+    char *data = new char[size];
+    if (!data) {
+        throw std::bad_alloc();
     }
 
-    int p;
-    MPI_Recv(&p, 1, MPI_INT, src, TAG_SWARM, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-    for (int i = 0; i < p; ++i) {
-        int peer;
-        MPI_Recv(&peer, 1, MPI_INT, src, TAG_SWARM, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        swarm.peers.insert(peer);
+    MPI_Recv(data, size, MPI_CHAR, src, TAG_DATA, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+    try {
+        swarm = deserialize_swarm(std::string(data, size));
+    } catch (...) {
+        delete[] data;
+        throw;
     }
 
-    char fname[MAX_FILENAME];
-    memset(fname, 0, MAX_FILENAME);
-    MPI_Recv(fname, MAX_FILENAME, MPI_CHAR, src, TAG_SWARM, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-    swarm.fname = fname;
-
-    int segNum;
-    MPI_Recv(&segNum, 1, MPI_INT, src, TAG_SWARM, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-    swarm.seg_num = segNum;
-
-    while (segNum--) {
-        char hash[HASH_SIZE + 1];
-        memset(hash, 0, HASH_SIZE + 1);
-        MPI_Recv(hash, HASH_SIZE + 1, MPI_CHAR, src, TAG_SWARM, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-        swarm.f_hash.push_back(hash);
-    }
+    delete[] data;
 }
+
 
 void send_inquiry(const inquiry_t &inquiry, int dest) {
     // Send frag_idx (integer)
@@ -120,4 +86,113 @@ MPI_Datatype createInquiryType() {
     MPI_Type_commit(&INQUIRY_T);
 
     return INQUIRY_T;
+}
+
+std::string serialize_swarm(const swarm_t &swarm) {
+    // Calculate the total size needed for serialization
+    size_t total_size = sizeof(int) + // seeds size
+                        sizeof(int) * swarm.seeds.size() +
+                        sizeof(int) + // peers size
+                        sizeof(int) * swarm.peers.size() +
+                        MAX_FILENAME + // filename
+                        sizeof(int) + // segment number
+                        swarm.f_hash.size() * (HASH_SIZE + 1);
+
+    // Allocate a contiguous buffer
+    char *data = (char *)malloc(total_size);
+    if (!data) {
+        throw std::bad_alloc();
+    }
+
+    char *ptr = data;
+
+    // Serialize seeds
+    int ss = swarm.seeds.size();
+    memcpy(ptr, &ss, sizeof(int));
+    ptr += sizeof(int);
+    for (int seed : swarm.seeds) {
+        memcpy(ptr, &seed, sizeof(int));
+        ptr += sizeof(int);
+    }
+
+    // Serialize peers
+    int ps = swarm.peers.size();
+    memcpy(ptr, &ps, sizeof(int));
+    ptr += sizeof(int);
+    for (int peer : swarm.peers) {
+        memcpy(ptr, &peer, sizeof(int));
+        ptr += sizeof(int);
+    }
+
+    // Serialize filename
+    char fname[MAX_FILENAME] = {0};
+    strncpy(fname, swarm.fname.c_str(), MAX_FILENAME - 1); // Ensure null-termination
+    memcpy(ptr, fname, MAX_FILENAME);
+    ptr += MAX_FILENAME;
+
+    // Serialize segment number
+    int segNum = swarm.seg_num;
+    memcpy(ptr, &segNum, sizeof(int));
+    ptr += sizeof(int);
+
+    // Serialize hashes
+    for (const std::string &frag : swarm.f_hash) {
+        char hash[HASH_SIZE + 1] = {0};
+        strncpy(hash, frag.c_str(), HASH_SIZE); // Truncate to HASH_SIZE
+        memcpy(ptr, hash, HASH_SIZE + 1);
+        ptr += HASH_SIZE + 1;
+    }
+
+    // Create a string from the buffer
+    std::string res(data, total_size);
+    free(data); // Free the allocated memory
+    return res;
+}
+
+
+swarm_t deserialize_swarm(const std::string &data) {
+    const char *data_ptr = data.data(); // Use pointer to raw data
+    swarm_t swarm;
+
+    // Deserialize seeds
+    int seeds_size;
+    memcpy(&seeds_size, data_ptr, sizeof(int));
+    data_ptr += sizeof(int);
+    for (int i = 0; i < seeds_size; ++i) {
+        int seed;
+        memcpy(&seed, data_ptr, sizeof(int));
+        data_ptr += sizeof(int);
+        swarm.seeds.insert(seed);
+    }
+
+    // Deserialize peers
+    int peers_size;
+    memcpy(&peers_size, data_ptr, sizeof(int));
+    data_ptr += sizeof(int);
+    for (int i = 0; i < peers_size; ++i) {
+        int peer;
+        memcpy(&peer, data_ptr, sizeof(int));
+        data_ptr += sizeof(int);
+        swarm.peers.insert(peer);
+    }
+
+    // Deserialize filename
+    char fname[MAX_FILENAME] = {0};
+    memcpy(fname, data_ptr, MAX_FILENAME);
+    data_ptr += MAX_FILENAME;
+    swarm.fname = fname;
+
+    // Deserialize segment number
+    memcpy(&swarm.seg_num, data_ptr, sizeof(int));
+    data_ptr += sizeof(int);
+
+    // Deserialize hashes
+    for (int i = 0; i < swarm.seg_num; ++i) {
+        char hash[HASH_SIZE + 1] = {0};
+        memcpy(hash, data_ptr, HASH_SIZE + 1);
+        data_ptr += HASH_SIZE + 1;
+        swarm.f_hash.push_back(hash);
+    }
+
+    return swarm;
 }
