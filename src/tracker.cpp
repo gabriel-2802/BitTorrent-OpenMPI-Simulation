@@ -31,9 +31,6 @@ void Tracker::run() {
 
          if (active_clients == 0)
             break;
-
-        debugPrint();
-
     }
 
     // kill uploads threads

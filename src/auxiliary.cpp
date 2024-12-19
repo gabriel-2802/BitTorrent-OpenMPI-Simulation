@@ -140,3 +140,7 @@ char* createBuffer(size_t size, std::string src) {
 
     return p;
 }
+
+bool checkDataIntegrity(const std::string &data, const std::string &hash) {
+	return data == hash;
+}

@@ -113,3 +113,5 @@ std::string serializeSwarm(const swarm_t &swarm);
 swarm_t deserializeSwarm(const std::string &data);
 
 char* createBuffer(size_t size, std::string src);
+
+bool checkDataIntegrity(const std::string &data, const std::string &hash);

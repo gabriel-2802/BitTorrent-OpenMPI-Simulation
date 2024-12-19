@@ -77,6 +77,11 @@ void downloadFragment(download_args_t *arg, const swarm_t& swarm) {
         if (ack) {
             char *buff = createBuffer(HASH_SIZE + 1, "");
             MPI_Recv(buff, HASH_SIZE + 1, MPI_CHAR, src, TAG_INQUIRY_RESPONSE, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+            if (!checkDataIntegrity(string(buff), swarm.f_hash[wanted_frag])) {
+                break;
+            }
+            
             // announce the tracker that this client downloaded a fragment
             MPI_Send(inquiry.fname, MAX_FILENAME, MPI_CHAR, TRACKER_RANK, TAG_SEG_DONE, MPI_COMM_WORLD);
 
