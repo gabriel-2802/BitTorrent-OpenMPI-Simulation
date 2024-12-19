@@ -13,10 +13,11 @@ public:
     Client(int numtasks, int rank);
     ~Client();
     void run() override;
-    void debugPrint() override;
+    void printStringRepresentation() override;
 private:
     pthread_t download_thread;
     pthread_t upload_thread;
+    int to_be_downloaded; // count of files that must be downloaded
 
     std::unordered_set<std::string> wanted_files;
     //fileName -> vector<file_frags/hash>
@@ -26,14 +27,18 @@ private:
     
     // synchronization
     pthread_mutex_t lock;
-    int to_be_downloaded; // count of files that must be downloaded
 
     
     void createThreads();
+
     void joinThreads();
+
     void *buildThreadArg(ThreadType type);
 
     void init();
+
     void announceTracker();
+
+    // prints all received files
     void showFiles();
 };

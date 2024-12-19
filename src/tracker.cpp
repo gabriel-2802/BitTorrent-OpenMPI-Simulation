@@ -41,28 +41,24 @@ void Tracker::run() {
         MPI_Send(nullptr, 0, MPI_INT, rk, TAG_KILL_ALL, MPI_COMM_WORLD);
     }
 
-    debugPrint();
+    printStringRepresentation();
 }
 
-void Tracker::debugPrint() {
+void Tracker::printStringRepresentation() {
     for (auto [fname, swarm] : file_swarms) {
-        cout << endl;
         cout << "File: " << fname << endl;
         cout << "Segments: " << swarm.seg_num << endl;
         cout << "Peers: ";
         for (auto &peer : swarm.peers) {
             cout << peer << " ";
         }
-
         cout << endl;
-        cout << "Seeds: ";
 
+        cout << "Seeds: ";
         for (auto &seed : swarm.seeds) {
             cout << seed << " ";
         }
-
         cout << endl << endl;
-
     }
 
     for (int i = 0; i < numtasks; ++i) {
@@ -74,6 +70,7 @@ void Tracker::debugPrint() {
 }
 
 void Tracker::collectInformation() {
+    // receve all data from clients
     for (int rk = 0; rk < numtasks; ++rk) {
         if (rk == TRACKER_RANK)
             continue;
@@ -122,26 +119,32 @@ void Tracker::handleRequest(int src, COMMUNICATION_TAG req) {
 
     switch (req) {
         case TAG_PROBING:
+            // client requested the swarm of a file
             handleRequest(src);
             break;
         case TAG_FILE_DONE:
+            // client finished downloading a file
             MPI_Recv(fname, MAX_FILENAME, MPI_CHAR, src, TAG_FILE_DONE, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             file_swarms[fname].seeds.insert(src);
             file_swarms[fname].peers.erase(src);
             break;
         case TAG_CLIENT_DONE:
+            // client finished downloading all files
             MPI_Recv(nullptr, 0, MPI_INT, src, TAG_CLIENT_DONE, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             active_clients--;
             break;
         case TAG_SEG_DONE:
+            // client finished downloading a segment
             MPI_Recv(fname, MAX_FILENAME, MPI_CHAR, src, TAG_SEG_DONE, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             file_swarms[fname].peers.insert(src);
             break;
         case TAG_BUSSYNESS:
+            // client requested the number of uploads of all clients
             MPI_Recv(nullptr, 0, MPI_INT, src, TAG_BUSSYNESS, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             MPI_Send(upload_per_client.data(), numtasks, MPI_INT, src, TAG_BUSSYNESS, MPI_COMM_WORLD);
             break;
         case TAG_UPLOAD_CONFIRM:
+            // client confirmed the upload of a fragment
             MPI_Recv(nullptr, 0, MPI_INT, src, TAG_UPLOAD_CONFIRM, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             upload_per_client[src]++;
             break;

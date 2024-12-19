@@ -20,7 +20,6 @@ Client::~Client() {
 
 void Client::run() {
     announceTracker();
-
     // wait for tracker to acknowledge
     int ack;
     MPI_Bcast(&ack, 1, MPI_INT, TRACKER_RANK, MPI_COMM_WORLD);
@@ -57,6 +56,7 @@ void *Client::buildThreadArg(ThreadType type) {
     download_args_t *d_args = new download_args_t;
     upload_args_t *u_args = new upload_args_t;
 
+    // build the argument structure for the threads
     switch (type) {
         case DOWNLOAD:
             d_args->rank = rank;
@@ -84,7 +84,7 @@ void Client::init() {
     ifstream fin(IN_FILE(rank));
     DIE(!fin, "error opening file");
 
-    
+    // read the files
     int numFiles;
     fin >> numFiles;
 
@@ -118,6 +118,7 @@ void Client::announceTracker() {
     file_data_t data = {};
     data.num_files = full_files.size();
 
+    // populate the file_data_t structure
     int file_index = 0;
     for (auto &[fileName, frags] : full_files) {
         strncpy(data.file_names[file_index], fileName.c_str(), MAX_FILENAME - 1);
@@ -133,6 +134,7 @@ void Client::announceTracker() {
         ++file_index;
     }
 
+    // send it to the tracker all at once
     MPI_Send(&data, 1, FILE_DATA_T, TRACKER_RANK, TAG_INIT, MPI_COMM_WORLD);
 }
 
@@ -152,7 +154,7 @@ void Client::showFiles() {
 }
 
 
-void Client::debugPrint() {
+void Client::printStringRepresentation() {
     for (auto &[fname, frags] : full_files) {
         cout << "File: " << fname << endl;
         cout << "Frags: ";

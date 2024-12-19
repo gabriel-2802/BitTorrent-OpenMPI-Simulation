@@ -15,34 +15,39 @@
 #define MAX_CHUNKS 100
 #define DOWNLOAD_LIMIT 10
 
+// OpenMPI data types used for communication
 extern MPI_Datatype INQUIRY_T;
-
 extern MPI_Datatype FILE_DATA_T;
 
+// creates the data types used for communication
 MPI_Datatype createInquiryType();
 
+// creates the data types used for communication
 MPI_Datatype createFileDataType();
 
+// argument structure for the download thread
 struct download_args_t{
     int rank;
     int *to_be_downloaded;
-    int num;
+    int num; // total number of hosts
+
+    // synchronization between upload and download threads
     pthread_mutex_t *lock;
 
+    // fileName -> wanted_state(false/true)
     std::unordered_map<std::string, bool> wanted_files;
+    // fileName -> vector<file_frags/hash>
     std::unordered_map<std::string, std::vector<std::string>> *partial_files; 
 
     
 };
 
-struct download_file_args_t{
-    download_args_t *main_args;
-    int tid;
-};
-
+// argument structure for the upload thread
 struct upload_args_t{
     int rank;
-    int num;
+    int num; // total number of hosts
+
+    // synchronization between upload and download threads
     pthread_mutex_t *lock;
 
     std::unordered_map<std::string, std::vector<std::string>> *full_files;
@@ -94,6 +99,7 @@ enum COMMUNICATION_TAG{
     TAG_UPLOAD_CONFIRM,
 };
 
+// types of threads
 enum ThreadType {
     DOWNLOAD,
     UPLOAD

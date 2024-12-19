@@ -8,7 +8,7 @@ public:
     TorrentEntity(int numtasks, int rank) : numtasks(numtasks), rank(rank) {};
     virtual ~TorrentEntity() {};
     virtual void run() {};
-    virtual void debugPrint() {};
+    virtual void printStringRepresentation() {};
 
 protected:
     int numtasks;
