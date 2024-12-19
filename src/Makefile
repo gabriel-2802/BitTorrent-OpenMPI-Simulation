@@ -2,5 +2,5 @@ build:
 	mpic++ -o tema2 *.cpp -pthread -Wall
 
 clean:
-	rm -rf tema3
+	rm -rf tema2
 	rm *_file*
