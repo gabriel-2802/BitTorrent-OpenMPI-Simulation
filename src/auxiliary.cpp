@@ -14,39 +14,30 @@ void receiveSwarm(swarm_t &swarm, int src) {
     int size;
     MPI_Recv(&size, 1, MPI_INT, src, TAG_DATA_SIZE, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-    // Allocate memory for incoming data
     char *data = new char[size];
-    if (!data) {
-        throw std::bad_alloc();
-    }
+    DIE(!data, "fatal failre in memory allocation");
 
     MPI_Recv(data, size, MPI_CHAR, src, TAG_DATA, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
     swarm = deserializeSwarm(std::string(data, size));
-    
-
     delete[] data;
 }
 
 std::string serializeSwarm(const swarm_t &swarm) {
-    // Calculate the total size needed for serialization
+    // total size of the buffer
     size_t total_size = sizeof(int) + // seeds size
                         sizeof(int) * swarm.seeds.size() +
                         sizeof(int) + // peers size
                         sizeof(int) * swarm.peers.size() +
                         MAX_FILENAME + // filename
-                        sizeof(int) + // segment number
+                        sizeof(int) + // segs nr
                         swarm.f_hash.size() * (HASH_SIZE + 1);
 
-    // Allocate a contiguous buffer
-    char *data = (char *)malloc(total_size);
-    if (!data) {
-        throw std::bad_alloc();
-    }
 
-    char *ptr = data;
+    char *data = new char[total_size];
+    DIE(!data, "fatal failre in memory allocation");
+    char *ptr = data; // current position in the buffer
 
-    // Serialize seeds
+    // seeds
     int ss = swarm.seeds.size();
     memcpy(ptr, &ss, sizeof(int));
     ptr += sizeof(int);
@@ -55,7 +46,7 @@ std::string serializeSwarm(const swarm_t &swarm) {
         ptr += sizeof(int);
     }
 
-    // Serialize peers
+    // peers
     int ps = swarm.peers.size();
     memcpy(ptr, &ps, sizeof(int));
     ptr += sizeof(int);
@@ -64,18 +55,18 @@ std::string serializeSwarm(const swarm_t &swarm) {
         ptr += sizeof(int);
     }
 
-    // Serialize filename
+    // filename
     char fname[MAX_FILENAME] = {0};
     strncpy(fname, swarm.fname.c_str(), MAX_FILENAME - 1); // Ensure null-termination
     memcpy(ptr, fname, MAX_FILENAME);
     ptr += MAX_FILENAME;
 
-    // Serialize segment number
+    // seg nr
     int segNum = swarm.seg_num;
     memcpy(ptr, &segNum, sizeof(int));
     ptr += sizeof(int);
 
-    // Serialize hashes
+    // hashes
     for (const std::string &frag : swarm.f_hash) {
         char hash[HASH_SIZE + 1] = {0};
         strncpy(hash, frag.c_str(), HASH_SIZE); // Truncate to HASH_SIZE
@@ -83,18 +74,18 @@ std::string serializeSwarm(const swarm_t &swarm) {
         ptr += HASH_SIZE + 1;
     }
 
-    // Create a string from the buffer
+    // return a string 
     std::string res(data, total_size);
-    free(data); // Free the allocated memory
+    free(data);
     return res;
 }
 
 
 swarm_t deserializeSwarm(const std::string &data) {
-    const char *data_ptr = data.data(); // Use pointer to raw data
+    const char *data_ptr = data.data();
     swarm_t swarm;
 
-    // Deserialize seeds
+    // seeds
     int seeds_size;
     memcpy(&seeds_size, data_ptr, sizeof(int));
     data_ptr += sizeof(int);
@@ -105,7 +96,7 @@ swarm_t deserializeSwarm(const std::string &data) {
         swarm.seeds.insert(seed);
     }
 
-    // Deserialize peers
+    // peers
     int peers_size;
     memcpy(&peers_size, data_ptr, sizeof(int));
     data_ptr += sizeof(int);
@@ -116,17 +107,17 @@ swarm_t deserializeSwarm(const std::string &data) {
         swarm.peers.insert(peer);
     }
 
-    // Deserialize filename
+    // filename
     char fname[MAX_FILENAME] = {0};
     memcpy(fname, data_ptr, MAX_FILENAME);
     data_ptr += MAX_FILENAME;
     swarm.fname = fname;
 
-    // Deserialize segment number
+    // segment number
     memcpy(&swarm.seg_num, data_ptr, sizeof(int));
     data_ptr += sizeof(int);
 
-    // Deserialize hashes
+    //  hashes
     for (int i = 0; i < swarm.seg_num; ++i) {
         char hash[HASH_SIZE + 1] = {0};
         memcpy(hash, data_ptr, HASH_SIZE + 1);
@@ -135,4 +126,17 @@ swarm_t deserializeSwarm(const std::string &data) {
     }
 
     return swarm;
+}
+
+char* createBuffer(size_t size, std::string src) {
+    char* p = new char[size];
+    DIE(!p, "fatal failure in new");
+
+    memset(p, 0, size);
+
+    if (src != "") {
+        memcpy(p, src.c_str(), src.size());
+    }
+
+    return p;
 }

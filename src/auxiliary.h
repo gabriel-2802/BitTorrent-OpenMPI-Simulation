@@ -25,7 +25,7 @@
         }                                           \
     } while (0)
 #define IN_FILE(rank) ("in" + std::to_string(rank) + ".txt")
-#define OUT_FILE(rank, name) ("client" + std::to_string(rank) + "_" + name)
+#define OUT_FILE(rank, name) ("client" + std::to_string(rank) + "_" + name) 
 #define DOWNLOAD_LIMIT 10
 
 struct download_args_t{
@@ -50,6 +50,7 @@ struct upload_args_t{
 
 };
 
+// data type used for communication between tracker and client
 struct swarm_t {
     std::unordered_set<int> seeds; // client ranks with full file
     std::unordered_set<int> peers; // client ranks with fragments
@@ -59,12 +60,14 @@ struct swarm_t {
     std::vector<std::string> f_hash; // hashes of fragments
 };
 
+// data type used for communication between clients
 struct inquiry_t {
     int frag_idx; // wanted fragment index
     char fname[MAX_FILENAME];
     char hash[HASH_SIZE + 1]; // hash of wanted fragment
 };
 
+// data type used for initial communication between client and tracker
 struct file_data_t {
     int num_files;
     char file_names[MAX_FILES][MAX_FILENAME];
@@ -103,3 +106,5 @@ void receiveSwarm(swarm_t &swarm, int src);
 std::string serializeSwarm(const swarm_t &swarm);
 
 swarm_t deserializeSwarm(const std::string &data);
+
+char* createBuffer(size_t size, std::string src);
