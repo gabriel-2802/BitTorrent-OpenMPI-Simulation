@@ -7,6 +7,7 @@
 using namespace std;
 
 MPI_Datatype INQUIRY_T;
+MPI_Datatype FILE_DATA_T;
 
 int main (int argc, char *argv[]) {
     int numtasks, rank;
@@ -19,6 +20,7 @@ int main (int argc, char *argv[]) {
     }
 
     INQUIRY_T = createInquiryType();
+    FILE_DATA_T = createFileDataType();
 
     MPI_Comm_size(MPI_COMM_WORLD, &numtasks);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -36,6 +38,5 @@ int main (int argc, char *argv[]) {
     delete entity;
     
     MPI_Type_free(&INQUIRY_T);
-
     MPI_Finalize();
 }

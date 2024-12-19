@@ -2,15 +2,15 @@
 
 using namespace std;
 
-void send_swarm(const swarm_t &swarm, int dest) {
-    std::string data = serialize_swarm(swarm);
+void sendSwarm(const swarm_t &swarm, int dest) {
+    std::string data = serializeSwarm(swarm);
     int size = data.size();
 
     MPI_Send(&size, 1, MPI_INT, dest, TAG_DATA_SIZE, MPI_COMM_WORLD);
     MPI_Send(data.data(), size, MPI_CHAR, dest, TAG_DATA, MPI_COMM_WORLD);
 }
 
-void receive_swarm(swarm_t &swarm, int src) {
+void receiveSwarm(swarm_t &swarm, int src) {
     int size;
     MPI_Recv(&size, 1, MPI_INT, src, TAG_DATA_SIZE, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
@@ -22,69 +22,13 @@ void receive_swarm(swarm_t &swarm, int src) {
 
     MPI_Recv(data, size, MPI_CHAR, src, TAG_DATA, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-    swarm = deserialize_swarm(std::string(data, size));
+    swarm = deserializeSwarm(std::string(data, size));
     
 
     delete[] data;
 }
 
-
-void send_inquiry(const inquiry_t &inquiry, int dest) {
-    // Send frag_idx (integer)
-    MPI_Send(&inquiry.frag_idx, 1, MPI_INT, dest, TAG_INQUIRY, MPI_COMM_WORLD);
-
-    // Send fileName (character array)
-    MPI_Send(inquiry.fileName, MAX_FILENAME, MPI_CHAR, dest, TAG_INQUIRY, MPI_COMM_WORLD);
-
-    // Send hash (character array)
-    MPI_Send(inquiry.hash, HASH_SIZE + 1, MPI_CHAR, dest, TAG_INQUIRY, MPI_COMM_WORLD);
-}
-
-void receive_inquiry(inquiry_t &inquiry, int src) {
-    MPI_Status status;
-
-    // Receive frag_idx (integer)
-    MPI_Recv(&inquiry.frag_idx, 1, MPI_INT, src, TAG_INQUIRY, MPI_COMM_WORLD, &status);
-
-    // Receive fileName (character array)
-    MPI_Recv(inquiry.fileName, MAX_FILENAME, MPI_CHAR, src, TAG_INQUIRY, MPI_COMM_WORLD, &status);
-
-    // Receive hash (character array)
-    MPI_Recv(inquiry.hash, HASH_SIZE + 1, MPI_CHAR, src, TAG_INQUIRY, MPI_COMM_WORLD, &status);
-}
-
-
-
-MPI_Datatype createInquiryType() {
-    MPI_Datatype INQUIRY_T;
-
-    const int nItems = 3;
-
-    int blockLengths[nItems] = {
-        1,                  
-        MAX_FILENAME,         
-        HASH_SIZE + 1        
-    };
-
-    MPI_Datatype types[nItems] = {
-        MPI_INT,              
-        MPI_CHAR,             
-        MPI_CHAR              
-    };
-
-    MPI_Aint offsets[nItems];
-    offsets[0] = offsetof(inquiry_t, frag_idx);
-    offsets[1] = offsetof(inquiry_t, fileName);
-    offsets[2] = offsetof(inquiry_t, hash);
-
-
-    MPI_Type_create_struct(nItems, blockLengths, offsets, types, &INQUIRY_T);
-    MPI_Type_commit(&INQUIRY_T);
-
-    return INQUIRY_T;
-}
-
-std::string serialize_swarm(const swarm_t &swarm) {
+std::string serializeSwarm(const swarm_t &swarm) {
     // Calculate the total size needed for serialization
     size_t total_size = sizeof(int) + // seeds size
                         sizeof(int) * swarm.seeds.size() +
@@ -146,7 +90,7 @@ std::string serialize_swarm(const swarm_t &swarm) {
 }
 
 
-swarm_t deserialize_swarm(const std::string &data) {
+swarm_t deserializeSwarm(const std::string &data) {
     const char *data_ptr = data.data(); // Use pointer to raw data
     swarm_t swarm;
 

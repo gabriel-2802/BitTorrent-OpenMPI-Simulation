@@ -19,12 +19,13 @@ private:
     pthread_t upload_thread;
 
     std::unordered_set<std::string> wanted_files;
-    std::unordered_map<std::string, std::vector<std::string>> full_files; //fileName -> vector<file_frags/hash>
-    std::unordered_map<std::string, std::vector<std::string>> to_be_downloaded_files; //fileName -> vector<file_frags/hash>
+    //fileName -> vector<file_frags/hash>
+    std::unordered_map<std::string, std::vector<std::string>> full_files;
+    //fileName -> vector<file_frags/hash>
+    std::unordered_map<std::string, std::vector<std::string>> to_be_downloaded_files;
     
     // synchronization
     pthread_mutex_t lock;
-
     int to_be_downloaded; // count of files that must be downloaded
 
     
@@ -32,7 +33,7 @@ private:
     void joinThreads();
     void *buildThreadArg(ThreadType type);
 
-    void readFileFrags();
+    void init();
     void announceTracker();
-    void printDownloadedFrags();
+    void showFiles();
 };

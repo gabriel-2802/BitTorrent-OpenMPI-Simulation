@@ -16,34 +16,29 @@
 #define HASH_SIZE 32
 #define MAX_CHUNKS 100
 
-#define MAX_USERS 12
 
-#define DIE(assertion, call_description) \
-    do { \
-        if (assertion) { \
-            std::cerr << call_description << "\n"; \
-            std::exit(errno); \
-        } \
+#define DIE(assertion, call_description)            \
+    do {                                            \
+        if (assertion) {                            \
+            std::cerr << call_description << "\n";  \
+            std::exit(errno);                       \
+        }                                           \
     } while (0)
-
-
 #define IN_FILE(rank) ("in" + std::to_string(rank) + ".txt")
 #define OUT_FILE(rank, name) ("client" + std::to_string(rank) + "_" + name)
 #define DOWNLOAD_LIMIT 10
-#define INFINITY 1000000
 
 struct download_args_t{
     int rank;
-    int *to_be_downloaded; // number of files downloaded
+    int *to_be_downloaded;
     int num;
     pthread_mutex_t *lock;
 
     std::unordered_map<std::string, bool> wanted_files;
-    std::unordered_map<std::string, std::vector<std::string>> *partial_files; // file -> vector<idx, hash>
+    std::unordered_map<std::string, std::vector<std::string>> *partial_files; 
 
     
 };
-
 
 struct upload_args_t{
     int rank;
@@ -56,21 +51,29 @@ struct upload_args_t{
 };
 
 struct swarm_t {
-    std::unordered_set<int> seeds; // client with full file
-    std::unordered_set<int> peers; // client with fragments
+    std::unordered_set<int> seeds; // client ranks with full file
+    std::unordered_set<int> peers; // client ranks with fragments
     std::string fname;
     int seg_num;
 
-    std::vector<std::string> f_hash; // file fragments hash
+    std::vector<std::string> f_hash; // hashes of fragments
 };
 
 struct inquiry_t {
-    int frag_idx;
-    char fileName[MAX_FILENAME];
-    char hash[HASH_SIZE + 1];
+    int frag_idx; // wanted fragment index
+    char fname[MAX_FILENAME];
+    char hash[HASH_SIZE + 1]; // hash of wanted fragment
 };
 
+struct file_data_t {
+    int num_files;
+    char file_names[MAX_FILES][MAX_FILENAME];
+    int num_frags[MAX_FILES];
+    char hashes[MAX_FILES][MAX_CHUNKS][HASH_SIZE + 1];
 
+};
+
+// tags used for communication between entities
 enum COMMUNICATION_TAG{
     TAG_INIT,
     TAG_PROBING,
@@ -88,28 +91,15 @@ enum COMMUNICATION_TAG{
     TAG_UPLOAD_CONFIRM,
 };
 
-enum PeerType {
-    PEER,
-    SEED
-};
-
 enum ThreadType {
     DOWNLOAD,
     UPLOAD
 };
 
+void sendSwarm(const swarm_t &swarm, int dest);
 
+void receiveSwarm(swarm_t &swarm, int src);
 
-void send_swarm(const swarm_t &swarm, int dest);
+std::string serializeSwarm(const swarm_t &swarm);
 
-void receive_swarm(swarm_t &swarm, int src);
-
-void send_inquiry(const inquiry_t &inquiry, int dest);
-
-void receive_inquiry(inquiry_t &inquiry, int src);
-
-std::string serialize_swarm(const swarm_t &swarm);
-
-swarm_t deserialize_swarm(const std::string &data);
-
-MPI_Datatype createInquiryType();
+swarm_t deserializeSwarm(const std::string &data);

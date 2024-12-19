@@ -2,7 +2,7 @@
 
 using namespace std;
 
-void *download_t_func(void *arg) {
+void *downloadThread(void *arg) {
 	download_args_t *args  = (download_args_t *) arg;
 
     while (true) {
@@ -17,11 +17,11 @@ void *download_t_func(void *arg) {
             MPI_Send(fName, MAX_FILENAME, MPI_CHAR, TRACKER_RANK, TAG_PROBING, MPI_COMM_WORLD);
             
             swarm_t fSwarm;
-            receive_swarm(fSwarm, TRACKER_RANK);
+            receiveSwarm(fSwarm, TRACKER_RANK);
 
 
-            download_fragment(args, fSwarm);
-            download_check_file_completion(args, fSwarm, file);
+            downloadFragment(args, fSwarm);
+            downloadCheckFileCompletion(args, fSwarm, file);
         }
 
         // no more files to download for this client
@@ -35,7 +35,7 @@ void *download_t_func(void *arg) {
     pthread_exit(NULL);
 }
 
-void download_fragment(download_args_t *arg, const swarm_t& swarm) {
+void downloadFragment(download_args_t *arg, const swarm_t& swarm) {
     unordered_set<int> all;
     all.insert(swarm.seeds.begin(), swarm.seeds.end());
     all.insert(swarm.peers.begin(), swarm.peers.end());
@@ -58,8 +58,8 @@ void download_fragment(download_args_t *arg, const swarm_t& swarm) {
     for (auto &[busy, src] : srcs) {
         inquiry_t inquiry;
         inquiry.frag_idx = wanted_frag;
-        memset(inquiry.fileName, 0, MAX_FILENAME);
-        memcpy(inquiry.fileName, swarm.fname.c_str(), swarm.fname.size());
+        memset(inquiry.fname, 0, MAX_FILENAME);
+        memcpy(inquiry.fname, swarm.fname.c_str(), swarm.fname.size());
         memset(inquiry.hash, 0, HASH_SIZE + 1);
 
         if (swarm.peers.find(src) == swarm.peers.end() && swarm.seeds.find(src) == swarm.seeds.end())
@@ -78,7 +78,7 @@ void download_fragment(download_args_t *arg, const swarm_t& swarm) {
             MPI_Recv(buff, HASH_SIZE + 1, MPI_CHAR, src, TAG_INQUIRY_RESPONSE, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
             // announce the tracker that this client downloaded a fragment
-            MPI_Send(inquiry.fileName, MAX_FILENAME, MPI_CHAR, TRACKER_RANK, TAG_SEG_DONE, MPI_COMM_WORLD);
+            MPI_Send(inquiry.fname, MAX_FILENAME, MPI_CHAR, TRACKER_RANK, TAG_SEG_DONE, MPI_COMM_WORLD);
 
             string hash = buff;
             arg->partial_files->find(swarm.fname)->second.push_back(hash);
@@ -88,7 +88,7 @@ void download_fragment(download_args_t *arg, const swarm_t& swarm) {
     }
 }
 
-void download_check_file_completion(download_args_t *arg, swarm_t swarm, string file) {
+void downloadCheckFileCompletion(download_args_t *arg, swarm_t swarm, string file) {
     if ((int)arg->partial_files->find(file)->second.size() == swarm.seg_num) {
         /*  *(arg->to_be_downloaded)--; is wrong. it was discovered after 2 hours of debugging,
         i despise c/c++ with passion */
@@ -104,7 +104,7 @@ void download_check_file_completion(download_args_t *arg, swarm_t swarm, string 
     }
 }
 
-void *upload_t_func(void *arg)
+void *uploadThread(void *arg)
 {
     upload_args_t *args = (upload_args_t *) arg;
     int src;
@@ -120,7 +120,7 @@ void *upload_t_func(void *arg)
                 pthread_exit(NULL);
             case TAG_INQUIRY:
                 src = status.MPI_SOURCE;
-                upload_inquiry_handler(args, src);
+                uploadInquiryHandler(args, src);
                 break;
             default:
                 break;
@@ -129,15 +129,15 @@ void *upload_t_func(void *arg)
     }
 }
 
-void upload_inquiry_handler(upload_args_t *argm, int src) {
+void uploadInquiryHandler(upload_args_t *argm, int src) {
     inquiry_t inquiry;
-    memset(inquiry.fileName, 0, MAX_FILENAME);
+    memset(inquiry.fname, 0, MAX_FILENAME);
 
     MPI_Recv(&inquiry, 1, INQUIRY_T, src, TAG_INQUIRY, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
     int ack = 0;
     string hash = "random_hash";
-    upload_confirm_inquiry(argm, inquiry, ack, hash);
+    uploadConfirmation(argm, inquiry, ack, hash);
 
     
 
@@ -153,8 +153,8 @@ void upload_inquiry_handler(upload_args_t *argm, int src) {
     }
 }
 
-void upload_confirm_inquiry(upload_args_t *arg, const inquiry_t &inquiry, int &ack, string &hash) {
-    string file = string(inquiry.fileName);
+void uploadConfirmation(upload_args_t *arg, const inquiry_t &inquiry, int &ack, string &hash) {
+    string file = string(inquiry.fname);
     int frag_idx = inquiry.frag_idx;
 
     if (arg->full_files->find(file) != arg->full_files->end()) {

@@ -3,16 +3,15 @@
 using namespace std;
 
 Client::Client(int numtasks, int rank) : TorrentEntity(numtasks, rank) {
-    readFileFrags();
+    init();
     to_be_downloaded = wanted_files.size();
     
-
+    // initially all wanted files are empty
     for (auto &file : wanted_files) {
         to_be_downloaded_files[file] = {};
     }
 
     pthread_mutex_init(&lock, NULL);
-
 }
 
 Client::~Client() {
@@ -20,24 +19,25 @@ Client::~Client() {
 }
 
 void Client::run() {
-    // debugPrint();
     announceTracker();
+
+    // wait for tracker to acknowledge
     int ack;
     MPI_Bcast(&ack, 1, MPI_INT, TRACKER_RANK, MPI_COMM_WORLD);
     DIE(ack != 1, "Fatal Failure: Tracker did not acknowledge");
 
     createThreads();
     joinThreads();
-    printDownloadedFrags();
+    showFiles();
 }
 
 void Client::createThreads() {
     int r;
 
-    r = pthread_create(&download_thread, NULL, download_t_func, buildThreadArg(DOWNLOAD));
+    r = pthread_create(&download_thread, NULL, downloadThread, buildThreadArg(DOWNLOAD));
     DIE(r, "download thread creation failed");
     
-    r = pthread_create(&upload_thread, NULL, upload_t_func, buildThreadArg(UPLOAD));
+    r = pthread_create(&upload_thread, NULL, uploadThread, buildThreadArg(UPLOAD));
     DIE(r, "upload thread creation failed");
 }
 
@@ -63,7 +63,6 @@ void *Client::buildThreadArg(ThreadType type) {
             d_args->num = numtasks;
             d_args->lock = &lock;
             d_args->to_be_downloaded = &to_be_downloaded;
-
             d_args->partial_files = &to_be_downloaded_files;
             for (auto &file : wanted_files) {
                 d_args->wanted_files[file] = true;
@@ -77,11 +76,11 @@ void *Client::buildThreadArg(ThreadType type) {
             u_args->partial_files = &to_be_downloaded_files;
             return (void *) u_args;
         default:
-            return NULL;   
+            throw runtime_error("Invalid thread type");
     }
 }
 
-void Client::readFileFrags() {
+void Client::init() {
     ifstream fin(IN_FILE(rank));
     DIE(!fin, "error opening file");
 
@@ -116,31 +115,29 @@ void Client::readFileFrags() {
 }
 
 void Client::announceTracker() {
-    int numFiles = full_files.size();
+    file_data_t data = {};
+    data.num_files = full_files.size();
 
-    MPI_Send(&numFiles, 1, MPI_INT, TRACKER_RANK, TAG_INIT, MPI_COMM_WORLD);
+    int file_index = 0;
+    for (auto &[fileName, frags] : full_files) {
+        strncpy(data.file_names[file_index], fileName.c_str(), MAX_FILENAME - 1);
 
+        data.num_frags[file_index] = frags.size();
 
-    for (auto [fileName, frags] : full_files) {
-        
-        char fName[MAX_FILENAME];
-        memset(fName, 0, MAX_FILENAME);
-        strcpy(fName, fileName.c_str());
-        MPI_Send(fName, MAX_FILENAME, MPI_CHAR, TRACKER_RANK, TAG_INIT, MPI_COMM_WORLD);
-
-        int numFrags = frags.size();
-        MPI_Send(&numFrags, 1, MPI_INT, TRACKER_RANK, TAG_INIT, MPI_COMM_WORLD);
-
-        for (auto &frag : frags) {
-            char hash[HASH_SIZE + 1];
-            memset(hash, 0, HASH_SIZE + 1);
-            strcpy(hash, frag.c_str());
-            MPI_Send(hash, HASH_SIZE + 1, MPI_CHAR, TRACKER_RANK, TAG_INIT, MPI_COMM_WORLD);
+        int frag_index = 0;
+        for (const auto &frag : frags) {
+            strncpy(data.hashes[file_index][frag_index], frag.c_str(), HASH_SIZE);
+            ++frag_index;
         }
+
+        ++file_index;
     }
+
+    MPI_Send(&data, 1, FILE_DATA_T, TRACKER_RANK, TAG_INIT, MPI_COMM_WORLD);
 }
 
-void Client::printDownloadedFrags() {
+
+void Client::showFiles() {
     for (auto [fname, fragInfo] : to_be_downloaded_files) {
         std::stringstream buffer;
 

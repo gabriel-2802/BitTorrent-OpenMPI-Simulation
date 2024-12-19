@@ -14,10 +14,9 @@ Tracker::~Tracker() {
 
 void Tracker::run() {
     int ack = 1;
-
     // gets all data from peers
     collectInformation();
-    // announce all peers that tracker is ready
+    // announce all clients that tracker is ready
     MPI_Bcast(&ack, 1, MPI_INT, TRACKER_RANK, MPI_COMM_WORLD);
 
     while (true) {
@@ -36,8 +35,6 @@ void Tracker::run() {
         debugPrint();
 
     }
-
-
 
     // kill uploads threads
     for (int rk = 0; rk < numtasks; ++rk) {
@@ -80,46 +77,35 @@ void Tracker::debugPrint() {
 }
 
 void Tracker::collectInformation() {
-    
     for (int rk = 0; rk < numtasks; ++rk) {
         if (rk == TRACKER_RANK)
             continue;
 
-        int numFiles;
-        MPI_Recv(&numFiles, 1, MPI_INT, rk, TAG_INIT, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        file_data_t data;
+        MPI_Recv(&data, 1, FILE_DATA_T, rk, TAG_INIT, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-        while (numFiles--) {
+        for (int i = 0; i < data.num_files; ++i) {
+            std::string fname(data.file_names[i]);
 
-            char fname[MAX_FILENAME];
-            memset(fname, 0, MAX_FILENAME);
-            MPI_Recv(fname, MAX_FILENAME, MPI_CHAR, rk, TAG_INIT, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
-            int numFrags;
-            MPI_Recv(&numFrags, 1, MPI_INT, rk, TAG_INIT, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
+            // create the swarm for the file, if it doesn't exist
             if (file_swarms.find(fname) == file_swarms.end()) {
                 swarm_t swarm;
                 swarm.fname = fname;
-                swarm.seg_num = numFrags;
+                swarm.seg_num = data.num_frags[i];
                 file_swarms[fname] = swarm;
-                
+
+                for (int j = 0; j < data.num_frags[i]; ++j) {
+                    string hash(data.hashes[i][j]);
+                    file_swarms[fname].f_hash.push_back(hash);
+                }
             }
 
+            // Add the client as a seed
             file_swarms[fname].seeds.insert(rk);
-            int numFragsCopy = numFrags;
-
-            while (numFragsCopy--) {
-                char hash[HASH_SIZE + 1];
-                memset(hash, 0, HASH_SIZE + 1);
-                MPI_Recv(hash, HASH_SIZE + 1, MPI_CHAR, rk, TAG_INIT, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                file_swarms[fname].f_hash.push_back(hash);
-            }
-
-
         }
-        
     }
 }
+
 
 void Tracker::handleRequest(int src) {
     char fname[MAX_FILENAME];
@@ -131,7 +117,7 @@ void Tracker::handleRequest(int src) {
 
    // at this points it is known that src requested file fname => send the swarm of the file
     swarm_t &swarm = file_swarms[file];
-    send_swarm(swarm, src);
+    sendSwarm(swarm, src);
 }
 
 void Tracker::handleRequest(int src, COMMUNICATION_TAG req) {
