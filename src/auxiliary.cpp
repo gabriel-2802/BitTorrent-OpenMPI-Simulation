@@ -1,4 +1,4 @@
-#include "auxiliray.h"
+#include "auxiliary.h"
 
 using namespace std;
 

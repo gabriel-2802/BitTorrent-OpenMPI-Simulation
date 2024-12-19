@@ -1,6 +1,6 @@
 #pragma once
-#include "Entity.h"
-#include "auxiliray.h"
+#include "entity.h"
+#include "auxiliary.h"
 
 
 class Tracker : public TorrentEntity {

@@ -1,5 +1,5 @@
-#include "Tracker.h"
-#include "auxiliray.h"
+#include "tracker.h"
+#include "auxiliary.h"
 
 using namespace std;
 

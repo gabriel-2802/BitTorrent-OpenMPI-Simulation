@@ -1,5 +1,5 @@
 #pragma once
-#include "auxiliray.h"
+#include "auxiliary.h"
 #include "type.h"
 
 void *download_t_func(void *arg);

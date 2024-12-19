@@ -1,7 +1,7 @@
-#include "auxiliray.h"
-#include "Entity.h"
-#include "Client.h"
-#include "Tracker.h"
+#include "auxiliary.h"
+#include "entity.h"
+#include "client.h"
+#include "tracker.h"
 #include "type.h"
 
 using namespace std;

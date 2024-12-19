@@ -1,4 +1,4 @@
 #pragma once
-#include "auxiliray.h"
+#include "auxiliary.h"
 
 extern MPI_Datatype INQUIRY_T;

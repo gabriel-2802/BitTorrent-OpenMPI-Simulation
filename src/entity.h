@@ -1,5 +1,5 @@
 #pragma once
-#include "auxiliray.h"
+#include "auxiliary.h"
 
 
 // abstract class
