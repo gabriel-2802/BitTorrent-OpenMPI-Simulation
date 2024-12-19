@@ -6,6 +6,7 @@ void *downloadThread(void *arg) {
 	download_args_t *args  = (download_args_t *) arg;
 
     while (true) {
+        
         for (auto &[file, wanted] : args->wanted_files) {
             if (!wanted) {
                 continue;
@@ -16,9 +17,14 @@ void *downloadThread(void *arg) {
             
             swarm_t fswarm;
             receiveSwarm(fswarm, TRACKER_RANK);
+            bool done = false;
 
-            downloadFragment(args, fswarm);
-            downloadCheckFileCompletion(args, fswarm, file);
+            // get exactly DOWNLOAD_LIMIT fragments, then go to the next file
+            for (int d = 0; d < DOWNLOAD_LIMIT && !done; ++d) {
+                downloadFragment(args, fswarm);
+                done = checkFileCompletion(args, fswarm, file);
+            }
+
             delete[] fname;
         }
 
@@ -29,25 +35,7 @@ void *downloadThread(void *arg) {
 
     // client ended downloading all its files
     MPI_Send(nullptr, 0, MPI_INT, TRACKER_RANK, TAG_CLIENT_DONE, MPI_COMM_WORLD);
-    // long num_threads = sysconf(_SC_NPROCESSORS_ONLN);
-    // DIE(num_threads < 0, "sysconf");
-
-    // pthread_t threads[num_threads];
-    // for (long i = 0; i < num_threads; ++i) {
-    //     download_file_args_t arg_f = {args, i};
-    //     pthread_create(&threads[i], nullptr, downloadFileThread, &arg_f);
-    // }
-
-    // for (long i = 0; i < num_threads; ++i) {
-    //     pthread_join(threads[i], nullptr);
-    // }
-
     pthread_exit(NULL);
-}
-
-
-void *downloadFileThread(void *arg) {
-    return nullptr;
 }
 
 void downloadFragment(download_args_t *arg, const swarm_t& swarm) {
@@ -106,7 +94,7 @@ void downloadFragment(download_args_t *arg, const swarm_t& swarm) {
     }
 }
 
-void downloadCheckFileCompletion(download_args_t *arg, swarm_t swarm, string file) {
+bool checkFileCompletion(download_args_t *arg, swarm_t swarm, string file) {
     if ((int)arg->partial_files->find(file)->second.size() == swarm.seg_num) {
         --(*(arg->to_be_downloaded)); 
 
@@ -114,7 +102,10 @@ void downloadCheckFileCompletion(download_args_t *arg, swarm_t swarm, string fil
         MPI_Send(fname, MAX_FILENAME, MPI_CHAR, TRACKER_RANK, TAG_FILE_DONE, MPI_COMM_WORLD);
         arg->wanted_files[file] = false;
         delete [] fname;
+        return true;
     }
+
+    return false;
 }
 
 void *uploadThread(void *arg) {

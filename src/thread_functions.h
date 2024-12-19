@@ -10,7 +10,7 @@ void *uploadThread(void *arg);
 
 void downloadFragment(download_args_t *arg, const swarm_t& swarm);
 
-void downloadCheckFileCompletion(download_args_t *arg, swarm_t swarm, std::string file);
+bool checkFileCompletion(download_args_t *arg, swarm_t swarm, std::string file);
 
 void uploadInquiryHandler(upload_args_t *arg, int src);
 

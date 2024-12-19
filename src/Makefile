@@ -3,4 +3,4 @@ build:
 
 clean:
 	rm -rf tema3
-	rm "*_file*"
+	rm *_file*

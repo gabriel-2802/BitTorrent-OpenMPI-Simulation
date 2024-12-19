@@ -76,7 +76,7 @@ std::string serializeSwarm(const swarm_t &swarm) {
 
     // return a string 
     std::string res(data, total_size);
-    free(data);
+    delete [] data;
     return res;
 }
 
