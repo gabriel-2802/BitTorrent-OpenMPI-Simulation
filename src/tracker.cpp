@@ -4,8 +4,8 @@
 using namespace std;
 
 Tracker::Tracker(int numtasks, int rank) : TorrentEntity(numtasks, rank) {
-    activePeers = numtasks - 1;
-    uploadPerClient.resize(numtasks, 0);
+    active_clients = numtasks - 1;
+    upload_per_client.resize(numtasks, 0);
 }
 
 Tracker::~Tracker() {
@@ -30,7 +30,7 @@ void Tracker::run() {
 
         handleRequest(source, req);
 
-         if (activePeers == 0)
+         if (active_clients == 0)
             break;
 
         debugPrint();
@@ -51,7 +51,7 @@ void Tracker::run() {
 }
 
 void Tracker::debugPrint() {
-    for (auto [fname, swarm] : fileSwarm) {
+    for (auto [fname, swarm] : file_swarms) {
         cout << endl;
         cout << "File: " << fname << endl;
         cout << "Segments: " << swarm.seg_num << endl;
@@ -74,7 +74,7 @@ void Tracker::debugPrint() {
     for (int i = 0; i < numtasks; ++i) {
         if (i == TRACKER_RANK)
             continue;
-        cout << "Client " << i << " has " << uploadPerClient[i] << " uploads\n";
+        cout << "Client " << i << " has " << upload_per_client[i] << " uploads\n";
     }
 
 }
@@ -97,22 +97,22 @@ void Tracker::collectInformation() {
             int numFrags;
             MPI_Recv(&numFrags, 1, MPI_INT, rk, TAG_INIT, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-            if (fileSwarm.find(fname) == fileSwarm.end()) {
+            if (file_swarms.find(fname) == file_swarms.end()) {
                 swarm_t swarm;
                 swarm.fname = fname;
                 swarm.seg_num = numFrags;
-                fileSwarm[fname] = swarm;
+                file_swarms[fname] = swarm;
                 
             }
 
-            fileSwarm[fname].seeds.insert(rk);
+            file_swarms[fname].seeds.insert(rk);
             int numFragsCopy = numFrags;
 
             while (numFragsCopy--) {
                 char hash[HASH_SIZE + 1];
                 memset(hash, 0, HASH_SIZE + 1);
                 MPI_Recv(hash, HASH_SIZE + 1, MPI_CHAR, rk, TAG_INIT, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                fileSwarm[fname].f_hash.push_back(hash);
+                file_swarms[fname].f_hash.push_back(hash);
             }
 
 
@@ -126,11 +126,11 @@ void Tracker::handleRequest(int src) {
     memset(fname, 0, MAX_FILENAME);
 
     MPI_Recv(fname, MAX_FILENAME, MPI_CHAR, src, TAG_PROBING, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-    DIE(fileSwarm.find(fname) == fileSwarm.end(), "File not found");
+    DIE(file_swarms.find(fname) == file_swarms.end(), "File not found");
     string file = fname;
 
    // at this points it is known that src requested file fname => send the swarm of the file
-    swarm_t &swarm = fileSwarm[file];
+    swarm_t &swarm = file_swarms[file];
     send_swarm(swarm, src);
 }
 
@@ -144,24 +144,24 @@ void Tracker::handleRequest(int src, COMMUNICATION_TAG req) {
             break;
         case TAG_FILE_DONE:
             MPI_Recv(fname, MAX_FILENAME, MPI_CHAR, src, TAG_FILE_DONE, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            fileSwarm[fname].seeds.insert(src);
-            fileSwarm[fname].peers.erase(src);
+            file_swarms[fname].seeds.insert(src);
+            file_swarms[fname].peers.erase(src);
             break;
         case TAG_CLIENT_DONE:
             MPI_Recv(nullptr, 0, MPI_INT, src, TAG_CLIENT_DONE, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            activePeers--;
+            active_clients--;
             break;
         case TAG_SEG_DONE:
             MPI_Recv(fname, MAX_FILENAME, MPI_CHAR, src, TAG_SEG_DONE, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            fileSwarm[fname].peers.insert(src);
+            file_swarms[fname].peers.insert(src);
             break;
         case TAG_BUSSYNESS:
             MPI_Recv(nullptr, 0, MPI_INT, src, TAG_BUSSYNESS, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            MPI_Send(uploadPerClient.data(), numtasks, MPI_INT, src, TAG_BUSSYNESS, MPI_COMM_WORLD);
+            MPI_Send(upload_per_client.data(), numtasks, MPI_INT, src, TAG_BUSSYNESS, MPI_COMM_WORLD);
             break;
         case TAG_UPLOAD_CONFIRM:
             MPI_Recv(nullptr, 0, MPI_INT, src, TAG_UPLOAD_CONFIRM, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            uploadPerClient[src]++;
+            upload_per_client[src]++;
             break;
         default:
             cerr << "Invalid request type\n";

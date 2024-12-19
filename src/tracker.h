@@ -11,9 +11,9 @@ public:
     void debugPrint() override;
 
 private:
-    int activePeers;
-    std::unordered_map<std::string, swarm_t> fileSwarm; // fileName -> swarm_t
-    std::vector<int> uploadPerClient;
+    int active_clients;
+    std::unordered_map<std::string, swarm_t> file_swarms; // fileName -> swarm_t
+    std::vector<int> upload_per_client;
 
     void collectInformation();
     void handleRequest(int src);
