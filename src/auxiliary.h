@@ -21,7 +21,6 @@
     } while (0)
 #define IN_FILE(rank) ("in" + std::to_string(rank) + ".txt")
 #define OUT_FILE(rank, name) ("client" + std::to_string(rank) + "_" + name) 
-#define DOWNLOAD_LIMIT 10
 
 
 void sendSwarm(const swarm_t &swarm, int dest);

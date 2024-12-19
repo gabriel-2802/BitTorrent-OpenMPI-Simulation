@@ -13,6 +13,7 @@
 #define MAX_FILENAME 15
 #define HASH_SIZE 32
 #define MAX_CHUNKS 100
+#define DOWNLOAD_LIMIT 10
 
 extern MPI_Datatype INQUIRY_T;
 
