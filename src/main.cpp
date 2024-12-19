@@ -38,5 +38,6 @@ int main (int argc, char *argv[]) {
     delete entity;
     
     MPI_Type_free(&INQUIRY_T);
+    MPI_Type_free(&FILE_DATA_T);
     MPI_Finalize();
 }
