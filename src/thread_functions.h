@@ -1,4 +1,6 @@
 #pragma once
+#include <unistd.h>
+
 #include "auxiliary.h"
 #include "type.h"
 

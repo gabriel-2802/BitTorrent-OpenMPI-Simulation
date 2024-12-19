@@ -108,8 +108,7 @@ void Tracker::collectInformation() {
 
 
 void Tracker::handleRequest(int src) {
-    char fname[MAX_FILENAME];
-    memset(fname, 0, MAX_FILENAME);
+    char *fname = createBuffer(MAX_FILENAME, "");
 
     MPI_Recv(fname, MAX_FILENAME, MPI_CHAR, src, TAG_PROBING, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     DIE(file_swarms.find(fname) == file_swarms.end(), "File not found");
@@ -118,11 +117,11 @@ void Tracker::handleRequest(int src) {
    // at this points it is known that src requested file fname => send the swarm of the file
     swarm_t &swarm = file_swarms[file];
     sendSwarm(swarm, src);
+    delete [] fname;
 }
 
 void Tracker::handleRequest(int src, COMMUNICATION_TAG req) {
-    char fname[MAX_FILENAME];
-    memset(fname, 0, MAX_FILENAME);
+    char *fname = createBuffer(MAX_FILENAME, "");
 
     switch (req) {
         case TAG_PROBING:
@@ -152,4 +151,5 @@ void Tracker::handleRequest(int src, COMMUNICATION_TAG req) {
         default:
             cerr << "Invalid request type\n";
     }
+    delete [] fname;
 }

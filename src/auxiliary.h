@@ -40,6 +40,11 @@ struct download_args_t{
     
 };
 
+struct download_file_args_t{
+    download_args_t *main_args;
+    int tid;
+};
+
 struct upload_args_t{
     int rank;
     int num;

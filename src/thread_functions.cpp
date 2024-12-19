@@ -10,18 +10,16 @@ void *downloadThread(void *arg) {
             if (!wanted) {
                 continue;
             }
-            
-            char fname[MAX_FILENAME];
-            memset(fname, 0, MAX_FILENAME);
-            strcpy(fname, file.c_str());
+
+            char *fname = createBuffer(MAX_FILENAME, file);
             MPI_Send(fname, MAX_FILENAME, MPI_CHAR, TRACKER_RANK, TAG_PROBING, MPI_COMM_WORLD);
             
-            swarm_t fSwarm;
-            receiveSwarm(fSwarm, TRACKER_RANK);
+            swarm_t fswarm;
+            receiveSwarm(fswarm, TRACKER_RANK);
 
-
-            downloadFragment(args, fSwarm);
-            downloadCheckFileCompletion(args, fSwarm, file);
+            downloadFragment(args, fswarm);
+            downloadCheckFileCompletion(args, fswarm, file);
+            delete[] fname;
         }
 
         // no more files to download for this client
@@ -31,11 +29,29 @@ void *downloadThread(void *arg) {
 
     // client ended downloading all its files
     MPI_Send(nullptr, 0, MPI_INT, TRACKER_RANK, TAG_CLIENT_DONE, MPI_COMM_WORLD);
+    // long num_threads = sysconf(_SC_NPROCESSORS_ONLN);
+    // DIE(num_threads < 0, "sysconf");
+
+    // pthread_t threads[num_threads];
+    // for (long i = 0; i < num_threads; ++i) {
+    //     download_file_args_t arg_f = {args, i};
+    //     pthread_create(&threads[i], nullptr, downloadFileThread, &arg_f);
+    // }
+
+    // for (long i = 0; i < num_threads; ++i) {
+    //     pthread_join(threads[i], nullptr);
+    // }
 
     pthread_exit(NULL);
 }
 
+
+void *downloadFileThread(void *arg) {
+    return nullptr;
+}
+
 void downloadFragment(download_args_t *arg, const swarm_t& swarm) {
+    // get all possible sources for the fragment
     unordered_set<int> all;
     all.insert(swarm.seeds.begin(), swarm.seeds.end());
     all.insert(swarm.peers.begin(), swarm.peers.end());
@@ -49,18 +65,16 @@ void downloadFragment(download_args_t *arg, const swarm_t& swarm) {
     MPI_Recv(busy_lvls, arg->num, MPI_INT, TRACKER_RANK, TAG_BUSSYNESS, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     
     // sort all clients by their busyness level to choose the most suitable one
-    vector<pair<int, int>> srcs; // busyLevel, src
+    vector<pair<int, int>> srcs; // <busyLevel, src>
     for (auto &src : all) {
         srcs.push_back({busy_lvls[src], src});
     }
     sort(srcs.begin(), srcs.end());
 
     for (auto &[busy, src] : srcs) {
-        inquiry_t inquiry;
+        inquiry_t inquiry = {};
         inquiry.frag_idx = wanted_frag;
-        memset(inquiry.fname, 0, MAX_FILENAME);
         memcpy(inquiry.fname, swarm.fname.c_str(), swarm.fname.size());
-        memset(inquiry.hash, 0, HASH_SIZE + 1);
 
         if (swarm.peers.find(src) == swarm.peers.end() && swarm.seeds.find(src) == swarm.seeds.end())
             continue;
@@ -73,15 +87,19 @@ void downloadFragment(download_args_t *arg, const swarm_t& swarm) {
         MPI_Recv(&ack, 1, MPI_INT, src, TAG_INQUIRY_ACK, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         
         if (ack) {
-            char buff[HASH_SIZE + 1];
-            memset(buff, 0, HASH_SIZE + 1);
+            char *buff = createBuffer(HASH_SIZE + 1, "");
             MPI_Recv(buff, HASH_SIZE + 1, MPI_CHAR, src, TAG_INQUIRY_RESPONSE, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
             // announce the tracker that this client downloaded a fragment
             MPI_Send(inquiry.fname, MAX_FILENAME, MPI_CHAR, TRACKER_RANK, TAG_SEG_DONE, MPI_COMM_WORLD);
 
             string hash = buff;
+
+            // ensure an upload thread doesn't read while writing
+            pthread_mutex_lock(arg->lock);
             arg->partial_files->find(swarm.fname)->second.push_back(hash);
+            pthread_mutex_unlock(arg->lock);
+
+            delete[] buff;
             break;
 
         }
@@ -90,17 +108,12 @@ void downloadFragment(download_args_t *arg, const swarm_t& swarm) {
 
 void downloadCheckFileCompletion(download_args_t *arg, swarm_t swarm, string file) {
     if ((int)arg->partial_files->find(file)->second.size() == swarm.seg_num) {
-        /*  *(arg->to_be_downloaded)--; is wrong. it was discovered after 2 hours of debugging,
-        i despise c/c++ with passion */
         --(*(arg->to_be_downloaded)); 
 
-
-        char fname[MAX_FILENAME];
-        memset(fname, 0, MAX_FILENAME);
-        strcpy(fname, file.c_str());
-
+        char *fname = createBuffer(MAX_FILENAME, file);
         MPI_Send(fname, MAX_FILENAME, MPI_CHAR, TRACKER_RANK, TAG_FILE_DONE, MPI_COMM_WORLD);
         arg->wanted_files[file] = false;
+        delete [] fname;
     }
 }
 
